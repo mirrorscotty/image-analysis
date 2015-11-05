@@ -83,6 +83,65 @@ vector<Vec2f> averageLines(const vector<Vec2f> lines, float rt, float tt)
     return new_lines;
 }
 
+double sampleArea(cv::Mat src)
+{
+    Mat dst, color_dst;
+    vector< vector<Point> > contours;
+    vector<Vec4i> hierarchy;
+    Rect bounding_rect; // Bounding box for each contour
+    int sample_contour_index = 0; // Index of the contour for the sample
+    int sample_area = 0; // Area of the sample
+    // Make a new Mat to hold the sample contour.
+    Mat sample(src.rows, src.cols, CV_8UC1, Scalar::all(0));
+    // Used to ensure that the contour is closed. This fills all holes in the
+    // sample that are smaller than 10 px.
+    cv::Mat structuringElement
+        = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(10, 10));
+    // Point at the (approximate) center of the image. This should be inside
+    // the boundary for the sample.
+    Point center;
+    center.x = src.cols/2-src.cols/10;
+    center.y = src.rows/2-src.rows/10;
+
+    // Find the edges
+    Canny( src, dst, 30, 150, 3, true );
+
+    namedWindow("Edges", 1);
+    imshow("Edges", dst);
+    waitKey(0);
+
+    // Close any holes
+    cv::morphologyEx( dst, dst, cv::MORPH_CLOSE, structuringElement );
+    // ?
+    cvtColor( dst, color_dst, CV_GRAY2BGR );
+
+    // FInd all the contours in the image and save them to a vector.
+    findContours(dst, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
+    // Look at each contour to see if it's bounding box contains the center
+    // point. If it does, then it's likely the sample's contour. Keep track of
+    // it.
+    for(int i = 0; i<contours.size(); i++) {
+        double a=contourArea(contours[i],false);
+        if( pointPolygonTest(contours[i], center, false) > 0 ) {
+        //if( center.inside(boundingRect(contours[i])) ) {
+        //if(a>largest_area) {
+            sample_area = a;
+            sample_contour_index = i;
+            bounding_rect = boundingRect(contours[i]);
+        }
+    }
+    Scalar color(255, 255, 255);
+    drawContours(sample, contours, sample_contour_index, color, CV_FILLED, 8, hierarchy);
+
+    ellipse(sample, center, Size(20, 20), 0, 0, 360, Scalar(255,255,255), 5, 8);
+   
+    namedWindow("Sample", 1);
+    imshow("Sample", sample);
+    waitKey(0);
+    
+    return sample_area;
+}
+
 int main(int argc, char** argv)
 {
     float theta;
@@ -97,20 +156,7 @@ int main(int argc, char** argv)
     Point minLoc, maxLoc, matchLoc;
     double minVal, maxVal;
 
-    //Contour variables
-    vector< vector<Point> > contours;
-    vector<Vec4i> hierarchy;
-    Rect bounding_rect;
-    int largest_contour_index = 0;
-    int largest_area = 0;
-    Mat sample(src.rows, src.cols, CV_8UC1, Scalar::all(0));
-    cv::Mat structuringElement = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(10, 10));
-    Point center;
-    center.x = src.cols/2-src.cols/10;
-    center.y = src.rows/2-src.rows/10;
-
     Canny( src, dst, 50, 200, 3, true );
-    cv::morphologyEx( dst, dst, cv::MORPH_CLOSE, structuringElement );
     cvtColor( dst, color_dst, CV_GRAY2BGR );
 
     matchTemplate(src, gridRef, result, CV_TM_SQDIFF);
@@ -120,28 +166,11 @@ int main(int argc, char** argv)
     //cv::rectangle(src, matchLoc,
             //cv::Point(matchLoc.x + gridRef.cols, matchLoc.y + gridRef.rows),
             //CV_RGB(0,255,0), 3);
-            //
-            //
-    findContours(dst, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
-    for(int i = 0; i<contours.size(); i++) {
-        double a=contourArea(contours[i],false);
-        if( center.inside(boundingRect(contours[i])) ) {
-        //if(a>largest_area) {
-            largest_area = a;
-            largest_contour_index = i;
-            bounding_rect = boundingRect(contours[i]);
-        }
-    }
-    Scalar color(255, 255, 255);
-    //largest_contour_index = -1;
-    drawContours(sample, contours, largest_contour_index, color, CV_FILLED, 8, hierarchy);
-    
-    std::cout << "Area = " << largest_area << '\n';
 
-    ellipse(sample, center, Size(10, 10), 0, 0, 360, Scalar(255,255,255), 2, 8);
+    std::cout << "Area (px) = " << sampleArea(src) << '\n';
 
     namedWindow("Grid", 1);
-    imshow("Grid", sample);
+    imshow("Grid", dst);
     waitKey(0);
     return 0;
 
