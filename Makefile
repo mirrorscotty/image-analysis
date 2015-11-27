@@ -5,7 +5,7 @@ SRC=$(wildcard *.cpp)
 
 all: calc-area
 
-calc-area: hough-lines.o merge-rows.o
+calc-area: hough-lines.o merge-rows.o sample-area.o main.o
 	$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
 doc: Doxyfile
